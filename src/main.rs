@@ -1,6 +1,6 @@
 #![allow(dead_code, unused)]
 
-use chrono::{DateTime, Utc};
+use chrono::{NaiveDateTime, ParseError};
 use std::env;
 use std::fs;
 use std::fs::{DirEntry, File, ReadDir};
@@ -20,7 +20,7 @@ struct Song {
     artist: String,
     name: String,
     length: Duration,
-    started: DateTime<Utc>,
+    started: NaiveDateTime,
 }
 
 fn main() -> Result<(), io::Error> {
@@ -52,25 +52,41 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
 }
 
 // should return a vector of Songs
-fn parse_logs(logfile: &Log) {
+fn parse_logs(logfile: &Log) -> Result<(), ParseError> {
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
-    dbg!(&rows);
+    // dbg!(&rows);
     for row in rows {
         if row.contains("started") || row.contains("stopped") {
             // row only contains session start time, requires different logic to parse
+        } else if row == "" {
+            // ingore empty rows
         } else {
             let mut parts: Vec<&str> = row.split(" - ").collect();
             let mut parts_iter = parts.iter();
 
             let datepart = parts_iter.next().unwrap();
             let timepart = parts_iter.next().unwrap();
-            let datetimepart = format!("{datepart} {timepart}");
-            let artistpart = parts_iter.next();
-            let namepart = parts_iter.next();
-            let lengthpart = parts_iter.next();
+            let artistpart = remove_formatting(parts_iter.next().unwrap());
+            let namepart = remove_formatting(parts_iter.next().unwrap());
+            let lengthpart = parts_iter.next().unwrap();
 
-            let datetimepart = DateTime::parse_from_str(&datetimepart, "%d-%m-%Y %H:%M:%S");
+            let datetimepartstr = format!("{datepart} {timepart}");
+            let datetimepart =
+                NaiveDateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S").unwrap();
+
+            dbg!(artistpart, namepart, lengthpart);
         }
     }
+
+    Ok(())
+}
+
+fn remove_formatting(value: &&str) -> String {
+    let mut chars = value.chars();
+
+    chars.next();
+    chars.next_back();
+
+    chars.as_str().to_string()
 }
