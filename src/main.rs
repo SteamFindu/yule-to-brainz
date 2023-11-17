@@ -1,5 +1,6 @@
 #![allow(dead_code, unused)]
 
+use chrono::{DateTime, Utc};
 use std::env;
 use std::fs;
 use std::fs::{DirEntry, File, ReadDir};
@@ -19,7 +20,7 @@ struct Song {
     artist: String,
     name: String,
     length: Duration,
-    started: DateTime,
+    started: DateTime<Utc>,
 }
 
 fn main() -> Result<(), io::Error> {
@@ -50,8 +51,26 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
     Ok(files)
 }
 
+// should return a vector of Songs
 fn parse_logs(logfile: &Log) {
-    let rows: Vec<&str> = logfile.contents.split("\n").collect();
+    let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
-    dbg!(rows);
+    dbg!(&rows);
+    for row in rows {
+        if row.contains("started") || row.contains("stopped") {
+            // row only contains session start time, requires different logic to parse
+        } else {
+            let mut parts: Vec<&str> = row.split(" - ").collect();
+            let mut parts_iter = parts.iter();
+
+            let datepart = parts_iter.next().unwrap();
+            let timepart = parts_iter.next().unwrap();
+            let datetimepart = format!("{datepart} {timepart}");
+            let artistpart = parts_iter.next();
+            let namepart = parts_iter.next();
+            let lengthpart = parts_iter.next();
+
+            let datetimepart = DateTime::parse_from_str(&datetimepart, "%d-%m-%Y %H:%M:%S");
+        }
+    }
 }
