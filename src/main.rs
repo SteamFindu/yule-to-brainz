@@ -1,13 +1,12 @@
 #![allow(dead_code, unused)]
 
-use chrono::{NaiveDateTime, ParseError};
+use chrono::{NaiveDate, NaiveDateTime, ParseError};
 use std::env;
 use std::fs;
 use std::fs::{DirEntry, File, ReadDir};
 use std::io;
 use std::io::Read;
-use std::time;
-use std::time::Duration;
+use std::mem;
 
 #[derive(Debug)]
 struct Log {
@@ -19,7 +18,7 @@ struct Log {
 struct Song {
     artist: String,
     name: String,
-    length: Duration,
+    length: i32,
     started: NaiveDateTime,
 }
 
@@ -56,6 +55,10 @@ fn parse_logs(logfile: &Log) -> Result<(), ParseError> {
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
     // dbg!(&rows);
+    let mut last_row_datetime: NaiveDateTime = NaiveDate::from_ymd_opt(1970, 1, 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
     for row in rows {
         if row.contains("started") || row.contains("stopped") {
             // row only contains session start time, requires different logic to parse
@@ -63,19 +66,44 @@ fn parse_logs(logfile: &Log) -> Result<(), ParseError> {
             // ingore empty rows
         } else {
             let mut parts: Vec<&str> = row.split(" - ").collect();
+
+            let mut namestr = if parts.len() == 6 {
+                // something has been goofed up and it has split a part of the songs name.
+                // this re-joins the suspected parts
+
+                let extrasplit = parts.remove(4);
+                let namestart = parts[3];
+                let nameval = format!("{namestart} {extrasplit}");
+
+                println!("song with name {nameval} has been super incorrecly tagged, fix it");
+                continue;
+                nameval
+            } else {
+                parts[3].to_string()
+            };
+
+            // remove continue from above function and uncomment this if you want to let trough badly formatted song titles
+            //mem::replace(&mut parts[3], &namestr);
+
+            // dbg!(&parts);
             let mut parts_iter = parts.iter();
 
             let datepart = parts_iter.next().unwrap();
             let timepart = parts_iter.next().unwrap();
             let artistpart = remove_formatting(parts_iter.next().unwrap());
             let namepart = remove_formatting(parts_iter.next().unwrap());
-            let lengthpart = parts_iter.next().unwrap();
+            let mut lengthpart = parts_iter.next().unwrap().split(":");
+
+            let mut mins: i32 = lengthpart.next().unwrap().parse().unwrap();
+            mins = mins * 60;
+            let secs: i32 = lengthpart.next().unwrap().parse().unwrap();
+            let lengthpartsec = mins + secs;
 
             let datetimepartstr = format!("{datepart} {timepart}");
             let datetimepart =
                 NaiveDateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S").unwrap();
 
-            dbg!(artistpart, namepart, lengthpart);
+            // let newsong: Song = Song {artist: artistpart,name: namepart,length: lengthpartsec,started: datetimepart,};
         }
     }
 
