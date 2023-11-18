@@ -27,6 +27,8 @@ fn main() -> Result<(), io::Error> {
 
     parse_logs(&logs[0]);
 
+    dbg!(parse_logs(&logs[1]));
+
     Ok(())
     // let contents = fs::read_to_string(file_path).expect("should have read file");
 }
@@ -51,7 +53,7 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
 }
 
 // should return a vector of Songs
-fn parse_logs(logfile: &Log) -> Result<(), ParseError> {
+fn parse_logs(logfile: &Log) -> Vec<Song> {
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
     // dbg!(&rows);
@@ -59,15 +61,29 @@ fn parse_logs(logfile: &Log) -> Result<(), ParseError> {
         .unwrap()
         .and_hms_opt(0, 0, 0)
         .unwrap();
+
+    let mut songs: Vec<Song> = Vec::new();
+
     for row in rows {
         if row.contains("started") || row.contains("stopped") {
             // row only contains session start time, requires different logic to parse
+
+            let mut parts: Vec<&str> = row.split(" ").collect();
+
+            let date = parts[3];
+            let time = parts[5];
+
+            let datetimepartstr = format!("{date} {time}");
+            dbg!(&datetimepartstr);
+            last_row_datetime =
+                NaiveDateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S").unwrap();
+            // TODO: add/fix a way to retroactively update if things were listened when stopped
         } else if row == "" {
             // ingore empty rows
         } else {
             let mut parts: Vec<&str> = row.split(" - ").collect();
 
-            let mut namestr = if parts.len() == 6 {
+            let mut namestr = if parts.len() >= 6 {
                 // something has been goofed up and it has split a part of the songs name.
                 // this re-joins the suspected parts
 
@@ -94,6 +110,11 @@ fn parse_logs(logfile: &Log) -> Result<(), ParseError> {
             let namepart = remove_formatting(parts_iter.next().unwrap());
             let mut lengthpart = parts_iter.next().unwrap().split(":");
 
+            if lengthpart.clone().count() > 2 {
+                // just ignore songs with over 1 hour playtime
+                continue;
+            }
+
             let mut mins: i32 = lengthpart.next().unwrap().parse().unwrap();
             mins = mins * 60;
             let secs: i32 = lengthpart.next().unwrap().parse().unwrap();
@@ -103,11 +124,23 @@ fn parse_logs(logfile: &Log) -> Result<(), ParseError> {
             let datetimepart =
                 NaiveDateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S").unwrap();
 
-            // let newsong: Song = Song {artist: artistpart,name: namepart,length: lengthpartsec,started: datetimepart,};
+            if !more_than_half_listened(last_row_datetime, datetimepart, lengthpartsec) {
+                println!("Song {namepart} was not listened to for over 50%");
+                continue;
+            }
+
+            let song = Song {
+                artist: artistpart,
+                name: namepart,
+                length: lengthpartsec,
+                started: datetimepart,
+            };
+
+            songs.push(song);
         }
     }
 
-    Ok(())
+    songs
 }
 
 fn remove_formatting(value: &&str) -> String {
@@ -117,4 +150,18 @@ fn remove_formatting(value: &&str) -> String {
     chars.next_back();
 
     chars.as_str().to_string()
+}
+
+fn more_than_half_listened(
+    last_datetime: NaiveDateTime,
+    current_datetime: NaiveDateTime,
+    length: i32,
+) -> bool {
+    let diff = current_datetime - last_datetime;
+
+    if diff.num_seconds() > (length / 2).into() {
+        true
+    } else {
+        false
+    }
 }
