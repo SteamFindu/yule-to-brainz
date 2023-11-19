@@ -1,7 +1,6 @@
 #![allow(dead_code, unused)]
 
 use chrono::{NaiveDate, NaiveDateTime, ParseError};
-use std::env;
 use std::fs;
 use std::fs::{DirEntry, File, ReadDir};
 use std::io;
@@ -12,6 +11,7 @@ use std::mem;
 struct Log {
     filepath: DirEntry,
     contents: String,
+    parsed: bool,
 }
 
 #[derive(Debug)]
@@ -25,9 +25,9 @@ struct Song {
 fn main() -> Result<(), io::Error> {
     let logs = load_files("/mnt/c/Users/sand/AppData/Roaming/WACUP/Logs/")?;
 
-    // parse_logs(&logs[1]);
+    let songs = parse_logs(&logs[0]);
 
-    dbg!(parse_logs(&logs[1]));
+    convert_to_json(&songs);
 
     Ok(())
     // let contents = fs::read_to_string(file_path).expect("should have read file");
@@ -46,16 +46,18 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
         files.push(Log {
             filepath: path,
             contents: content,
+            parsed: false,
         });
     }
 
     Ok(files)
 }
+fn convert_to_json(songs: &Vec<Song>) {}
 
 fn parse_logs(logfile: &Log) -> Vec<Song> {
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
-    dbg!(&rows);
+    // dbg!(&rows);
     let mut songs: Vec<Song> = Vec::new();
 
     let mut last_row_datetime: NaiveDateTime = NaiveDate::from_ymd_opt(1970, 1, 1)
@@ -134,25 +136,29 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
             let datetimepart =
                 NaiveDateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S").unwrap();
 
-            if !more_than_half_listened(last_row_datetime, datetimepart, lengthpartsec) {
+            let next_row_datetimepartstr = if rows_clone[next_row_pos].contains("stopped") {
+                let mut row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
+                let next_row_date = row_clone[3];
+                let next_row_time = row_clone[5];
+
+                format!("{next_row_date} {next_row_time}")
+            } else {
+                let mut row_clone: Vec<&str> = rows_clone[next_row_pos].split(" - ").collect();
+                let next_row_date = row_clone[0];
+                let next_row_time = row_clone[1];
+
+                // dbg!(next_row_date, next_row_time);
+
+                format!("{next_row_date} {next_row_time}")
+            };
+
+            let next_row_datetime =
+                NaiveDateTime::parse_from_str(&next_row_datetimepartstr, "%d-%m-%Y %H:%M:%S")
+                    .unwrap();
+
+            if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartsec) {
                 println!("Song {namepart} was not listened to for over 50%");
                 continue;
-            }
-
-            if rows_clone[next_row_pos].contains("stopped") {
-                let mut row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
-                let clone_date = row_clone[3];
-                let clone_time = row_clone[5];
-
-                let clone_datetimepartstr = format!("{clone_date} {clone_time}");
-                let next_row_datetime =
-                    NaiveDateTime::parse_from_str(&clone_datetimepartstr, "%d-%m-%Y %H:%M:%S")
-                        .unwrap();
-
-                if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartsec) {
-                    println!("Song {namepart} was not listened to for over 50%");
-                    continue;
-                }
             }
 
             let song = Song {
@@ -180,13 +186,13 @@ fn remove_formatting(value: &&str) -> String {
 }
 
 fn more_than_half_listened(
-    last_datetime: NaiveDateTime,
-    current_datetime: NaiveDateTime,
+    this_datetime: NaiveDateTime,
+    next_datetime: NaiveDateTime,
     length: i32,
 ) -> bool {
-    let diff = current_datetime - last_datetime;
+    let diff = next_datetime - this_datetime;
 
-    // dbg!(last_datetime, current_datetime, length, diff);
+    // dbg!(this_datetime, next_datetime, length, diff);
     if diff.num_seconds() > (length / 2).into() {
         true
     } else {
