@@ -25,7 +25,7 @@ struct Song {
 fn main() -> Result<(), io::Error> {
     let logs = load_files("/mnt/c/Users/sand/AppData/Roaming/WACUP/Logs/")?;
 
-    parse_logs(&logs[0]);
+    // parse_logs(&logs[1]);
 
     dbg!(parse_logs(&logs[1]));
 
@@ -52,22 +52,24 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
     Ok(files)
 }
 
-// should return a vector of Songs
 fn parse_logs(logfile: &Log) -> Vec<Song> {
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
-    // dbg!(&rows);
+    dbg!(&rows);
+    let mut songs: Vec<Song> = Vec::new();
+
     let mut last_row_datetime: NaiveDateTime = NaiveDate::from_ymd_opt(1970, 1, 1)
         .unwrap()
         .and_hms_opt(0, 0, 0)
         .unwrap();
-
-    let mut songs: Vec<Song> = Vec::new();
+    let rows_clone = rows.clone();
+    let mut next_row_pos: usize = 0;
 
     for row in rows {
-        if row.contains("started") || row.contains("stopped") {
+        next_row_pos += 1; // next row
+        if row.contains("<<<") {
             // row only contains session start time, requires different logic to parse
-
+            /*
             let mut parts: Vec<&str> = row.split(" ").collect();
 
             let date = parts[3];
@@ -77,7 +79,7 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
             dbg!(&datetimepartstr);
             last_row_datetime =
                 NaiveDateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S").unwrap();
-            // TODO: add/fix a way to retroactively update if things were listened when stopped
+            */
         } else if row == "" {
             // ingore empty rows
         } else {
@@ -112,6 +114,7 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
 
             if lengthpart.clone().count() > 2 {
                 // just ignore songs with over 1 hour playtime
+                println!("song {namepart} has over 1 hour playtime, not supported");
                 continue;
             }
 
@@ -119,6 +122,12 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
             mins = mins * 60;
             let secs: i32 = lengthpart.next().unwrap().parse().unwrap();
             let lengthpartsec = mins + secs;
+
+            if lengthpartsec == 0 {
+                continue;
+            }
+
+            // dbg!(&artistpart, &namepart);
 
             let datetimepartstr = format!("{datepart} {timepart}");
             let datetimepart =
@@ -129,6 +138,22 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
                 continue;
             }
 
+            if rows_clone[next_row_pos].contains("stopped") {
+                let mut row_clone: Vec<&str> = row.split(" ").collect();
+                let clone_date = row_clone[3];
+                let clone_time = row_clone[5];
+
+                let clone_datetimepartstr = format!("{datepart} {timepart}");
+                let next_row_datetime =
+                    NaiveDateTime::parse_from_str(&clone_datetimepartstr, "%d-%m-%Y %H:%M:%S")
+                        .unwrap();
+
+                if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartsec) {
+                    println!("Song {namepart} was not listened to for over 50%");
+                    continue;
+                }
+            }
+
             let song = Song {
                 artist: artistpart,
                 name: namepart,
@@ -137,6 +162,7 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
             };
 
             songs.push(song);
+            last_row_datetime = datetimepart;
         }
     }
 
@@ -159,6 +185,7 @@ fn more_than_half_listened(
 ) -> bool {
     let diff = current_datetime - last_datetime;
 
+    // dbg!(last_datetime, current_datetime, length, diff);
     if diff.num_seconds() > (length / 2).into() {
         true
     } else {
