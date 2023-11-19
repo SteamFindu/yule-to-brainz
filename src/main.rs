@@ -124,6 +124,7 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
             let lengthpartsec = mins + secs;
 
             if lengthpartsec == 0 {
+                println!("song {namepart} has 0 length?? fix please");
                 continue;
             }
 
@@ -139,11 +140,11 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
             }
 
             if rows_clone[next_row_pos].contains("stopped") {
-                let mut row_clone: Vec<&str> = row.split(" ").collect();
+                let mut row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
                 let clone_date = row_clone[3];
                 let clone_time = row_clone[5];
 
-                let clone_datetimepartstr = format!("{datepart} {timepart}");
+                let clone_datetimepartstr = format!("{clone_date} {clone_time}");
                 let next_row_datetime =
                     NaiveDateTime::parse_from_str(&clone_datetimepartstr, "%d-%m-%Y %H:%M:%S")
                         .unwrap();
