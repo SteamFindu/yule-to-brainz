@@ -1,10 +1,11 @@
 [package]
-name = "winamp-listenbrainz"
-version = "0.1.0"
+name = "yule-to-brainz"
+version = "0.4.0"
 edition = "2021"
 
  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4.31"
+chrono = { version = "0.4.31", features = ["serde"]}
+serde = { version = "1.0.192", features = ["derive"] }
 serde_json = "1.0.108"

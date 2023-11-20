@@ -1,4 +1,4 @@
-# Winamp to listenbrainz 
+# winamp/wacup yule logs to listenbrainz 
 
 Small rust script to add winamp logged music to listenbrainz
 

@@ -1,11 +1,12 @@
-#![allow(dead_code, unused)]
+#![allow(dead_code, unreachable_code)]
 
-use chrono::{NaiveDate, NaiveDateTime, ParseError};
+use chrono::naive::serde::ts_seconds_option;
+use chrono::{DateTime, Local, NaiveDateTime};
+use serde::{Deserialize, Serialize};
 use std::fs;
-use std::fs::{DirEntry, File, ReadDir};
+use std::fs::{DirEntry, File};
 use std::io;
 use std::io::Read;
-use std::mem;
 
 #[derive(Debug)]
 struct Log {
@@ -14,12 +15,13 @@ struct Log {
     parsed: bool,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Song {
     artist: String,
     name: String,
     length: i32,
-    started: NaiveDateTime,
+    #[serde(with = "ts_seconds_option")]
+    started: Option<NaiveDateTime>,
 }
 
 fn main() -> Result<(), io::Error> {
@@ -27,7 +29,7 @@ fn main() -> Result<(), io::Error> {
 
     let songs = parse_logs(&logs[0]);
 
-    convert_to_json(&songs);
+    let json = convert_to_json(&songs);
 
     Ok(())
     // let contents = fs::read_to_string(file_path).expect("should have read file");
@@ -52,7 +54,15 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
 
     Ok(files)
 }
-fn convert_to_json(songs: &Vec<Song>) {}
+
+fn convert_to_json(songs: &Vec<Song>) -> String {
+    // dbg!(&songs);
+    let j = serde_json::to_string(&songs).unwrap();
+
+    // dbg!(&j);
+
+    j
+}
 
 fn parse_logs(logfile: &Log) -> Vec<Song> {
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
@@ -60,12 +70,9 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
     // dbg!(&rows);
     let mut songs: Vec<Song> = Vec::new();
 
-    let mut last_row_datetime: NaiveDateTime = NaiveDate::from_ymd_opt(1970, 1, 1)
-        .unwrap()
-        .and_hms_opt(0, 0, 0)
-        .unwrap();
     let rows_clone = rows.clone();
     let mut next_row_pos: usize = 0;
+    let timezone = Local::now().offset().clone();
 
     for row in rows {
         next_row_pos += 1; // next row
@@ -87,7 +94,7 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
         } else {
             let mut parts: Vec<&str> = row.split(" - ").collect();
 
-            let mut namestr = if parts.len() >= 6 {
+            let _namestr = if parts.len() >= 6 {
                 // something has been goofed up and it has split a part of the songs name.
                 // this re-joins the suspected parts
 
@@ -123,53 +130,54 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
             let mut mins: i32 = lengthpart.next().unwrap().parse().unwrap();
             mins = mins * 60;
             let secs: i32 = lengthpart.next().unwrap().parse().unwrap();
-            let lengthpartsec = mins + secs;
+            let lengthpartmsec = (mins + secs) * 1000;
 
-            if lengthpartsec == 0 {
+            if lengthpartmsec == 0 {
                 println!("song {namepart} has 0 length?? fix please");
                 continue;
             }
 
             // dbg!(&artistpart, &namepart);
 
-            let datetimepartstr = format!("{datepart} {timepart}");
-            let datetimepart =
-                NaiveDateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S").unwrap();
+            let datetimepartstr = format!("{datepart} {timepart} {timezone}");
+            let datetimepart = DateTime::parse_from_str(&datetimepartstr, "%d-%m-%Y %H:%M:%S %z")
+                .unwrap()
+                .naive_utc();
 
             let next_row_datetimepartstr = if rows_clone[next_row_pos].contains("stopped") {
-                let mut row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
+                let row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
                 let next_row_date = row_clone[3];
                 let next_row_time = row_clone[5];
 
-                format!("{next_row_date} {next_row_time}")
+                format!("{next_row_date} {next_row_time} {timezone}")
             } else {
-                let mut row_clone: Vec<&str> = rows_clone[next_row_pos].split(" - ").collect();
+                let row_clone: Vec<&str> = rows_clone[next_row_pos].split(" - ").collect();
                 let next_row_date = row_clone[0];
                 let next_row_time = row_clone[1];
 
                 // dbg!(next_row_date, next_row_time);
 
-                format!("{next_row_date} {next_row_time}")
+                format!("{next_row_date} {next_row_time} {timezone}")
             };
 
             let next_row_datetime =
-                NaiveDateTime::parse_from_str(&next_row_datetimepartstr, "%d-%m-%Y %H:%M:%S")
-                    .unwrap();
+                DateTime::parse_from_str(&next_row_datetimepartstr, "%d-%m-%Y %H:%M:%S %z")
+                    .unwrap()
+                    .naive_utc();
 
-            if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartsec) {
-                println!("Song {namepart} was not listened to for over 50%");
+            if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartmsec) {
+                // println!("Song {namepart} was not listened to for over 50%");
                 continue;
             }
 
             let song = Song {
                 artist: artistpart,
                 name: namepart,
-                length: lengthpartsec,
-                started: datetimepart,
+                length: lengthpartmsec,
+                started: Some(datetimepart),
             };
 
             songs.push(song);
-            last_row_datetime = datetimepart;
         }
     }
 
@@ -193,7 +201,7 @@ fn more_than_half_listened(
     let diff = next_datetime - this_datetime;
 
     // dbg!(this_datetime, next_datetime, length, diff);
-    if diff.num_seconds() > (length / 2).into() {
+    if diff.num_milliseconds() > (length / 2).into() {
         true
     } else {
         false
