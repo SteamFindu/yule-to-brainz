@@ -55,15 +55,6 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
     Ok(files)
 }
 
-fn convert_to_json(songs: &Vec<Song>) -> String {
-    // dbg!(&songs);
-    let j = serde_json::to_string(&songs).unwrap();
-
-    // dbg!(&j);
-
-    j
-}
-
 fn parse_logs(logfile: &Log) -> Vec<Song> {
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
