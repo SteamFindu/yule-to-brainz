@@ -16,12 +16,17 @@ struct Log {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct Submission {
+    #[serde(with = "ts_seconds_option")]
+    listened_at: Option<NaiveDateTime>,
+    track_metadata: Song,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct Song {
     artist_name: String,
     song_name: String,
     duration_ms: i32,
-    #[serde(with = "ts_seconds_option")]
-    listened_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug)]
@@ -44,10 +49,12 @@ fn main() -> Result<(), io::Error> {
 
     let songs = parse_logs(&logs[0]);
 
-    let json = serde_json::to_string(&songs)?;
+    let songs_json = serde_json::to_string(&songs)?;
+
+    dbg!(songs_json);
 
     /*
-    let clint = reqwest::Client::new();
+    let clint = reqwest::blocking:::Client::new();
     let res = clint
         .post("https://api.listenbrainz.org")
         .header("Content-type", "application/json")
@@ -86,12 +93,12 @@ fn delete_logs(log: &Log) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn parse_logs(logfile: &Log) -> Vec<Song> {
+fn parse_logs(logfile: &Log) -> Vec<Submission> {
     println!("Parsing log {0}", logfile.filepath.path().to_str().unwrap());
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
     // dbg!(&rows);
-    let mut songs: Vec<Song> = Vec::new();
+    let mut submissions: Vec<Submission> = Vec::new();
 
     let rows_clone = rows.clone();
     let mut next_row_pos: usize = 0;
@@ -203,14 +210,18 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
                 artist_name: artistpart,
                 song_name: namepart,
                 duration_ms: lengthpartmsec,
-                listened_at: Some(datetimepart),
             };
 
-            songs.push(song);
+            let submission = Submission {
+                listened_at: Some(datetimepart),
+                track_metadata: song,
+            };
+
+            submissions.push(submission);
         }
     }
 
-    songs
+    submissions
 }
 
 fn remove_formatting(value: &&str) -> String {
