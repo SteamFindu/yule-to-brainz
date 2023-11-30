@@ -51,8 +51,16 @@ fn main() -> Result<(), io::Error> {
 
     let songs_json = serde_json::to_string(&songs)?;
 
-    dbg!(songs_json);
+    let request_json = format!(
+        "{{
+        \"listen_type\": \"import\",
+        \"payload\": [
+        {}
+        ]}}",
+        songs_json
+    );
 
+    println!("{:?}", request_json);
     /*
     let clint = reqwest::blocking:::Client::new();
     let res = clint
