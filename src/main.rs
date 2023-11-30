@@ -3,10 +3,10 @@
 use chrono::naive::serde::ts_seconds_option;
 use chrono::{DateTime, Local, NaiveDateTime};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::fs::{DirEntry, File};
 use std::io;
 use std::io::Read;
+use std::{env, fs};
 
 #[derive(Debug)]
 struct Log {
@@ -17,25 +17,50 @@ struct Log {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Song {
-    artist: String,
-    name: String,
-    length: i32,
+    artist_name: String,
+    song_name: String,
+    duration_ms: i32,
     #[serde(with = "ts_seconds_option")]
-    started: Option<NaiveDateTime>,
+    listened_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug)]
+struct Options {
+    filepath: String,
+    usertoken: String,
 }
 
 fn main() -> Result<(), io::Error> {
-    let logs = load_files("/mnt/c/Users/sand/AppData/Roaming/WACUP/Logs/")?;
+    let args: Vec<String> = env::args().collect();
+
+    let options = Options {
+        filepath: args[1].to_string(),
+        usertoken: args[2].to_string(),
+    };
+
+    dbg!(&options);
+
+    let logs = load_files(options.filepath)?;
 
     let songs = parse_logs(&logs[0]);
 
-    let json = convert_to_json(&songs);
+    let json = serde_json::to_string(&songs)?;
+
+    /*
+    let clint = reqwest::Client::new();
+    let res = clint
+        .post("https://api.listenbrainz.org")
+        .header("Content-type", "application/json")
+        .header(
+            "Authorization",
+            "Token ".to_owned() + &options.usertoken.to_owned(),
+        );
+    */
 
     Ok(())
-    // let contents = fs::read_to_string(file_path).expect("should have read file");
 }
 
-fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
+fn load_files(path: String) -> Result<Vec<Log>, io::Error> {
     let mut files: Vec<Log> = Vec::new();
     let paths = fs::read_dir(path).unwrap().filter_map(|e| e.ok());
 
@@ -55,7 +80,14 @@ fn load_files(path: &str) -> Result<Vec<Log>, io::Error> {
     Ok(files)
 }
 
+fn delete_logs(log: &Log) -> Result<(), io::Error> {
+    dbg!(log.filepath.path());
+    // fs::remove_file(log.filepath.path())?;
+    Ok(())
+}
+
 fn parse_logs(logfile: &Log) -> Vec<Song> {
+    println!("Parsing log {0}", logfile.filepath.path().to_str().unwrap());
     let rows: Vec<&str> = logfile.contents.split("\r\n").collect();
 
     // dbg!(&rows);
@@ -156,16 +188,22 @@ fn parse_logs(logfile: &Log) -> Vec<Song> {
                     .unwrap()
                     .naive_utc();
 
-            if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartmsec) {
+            if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartmsec)
+                || lengthpartmsec < 240000
+            {
+                /* Listens should be submitted for tracks when the user has listened to half the track or 4 minutes of the track,
+                 * whichever is lower. If the user hasn’t listened to 4 minutes or half the track,
+                 * it doesn’t fully count as a listen and should not be submitted. */
+
                 // println!("Song {namepart} was not listened to for over 50%");
                 continue;
             }
 
             let song = Song {
-                artist: artistpart,
-                name: namepart,
-                length: lengthpartmsec,
-                started: Some(datetimepart),
+                artist_name: artistpart,
+                song_name: namepart,
+                duration_ms: lengthpartmsec,
+                listened_at: Some(datetimepart),
             };
 
             songs.push(song);
