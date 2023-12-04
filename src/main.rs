@@ -4,8 +4,8 @@ use chrono::naive::serde::ts_seconds_option;
 use chrono::{DateTime, Local, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use std::fs::{DirEntry, File};
-use std::io;
 use std::io::Read;
+use std::io::{self, Write};
 use std::{env, fs};
 
 #[derive(Debug)]
@@ -60,17 +60,23 @@ fn main() -> Result<(), io::Error> {
         songs_json
     );
 
-    println!("{:?}", request_json);
-    /*
-    let clint = reqwest::blocking:::Client::new();
+    let clint = reqwest::blocking::Client::new();
     let res = clint
-        .post("https://api.listenbrainz.org")
+        .post("http://localhost:8100/1/submit-listens")
         .header("Content-type", "application/json")
         .header(
             "Authorization",
             "Token ".to_owned() + &options.usertoken.to_owned(),
-        );
-    */
+        )
+        .body(request_json)
+        .send()
+        .unwrap()
+        .text()
+        .unwrap();
+
+    println!("{:?}", res);
+
+    File::create("res.html")?.write_all(res.as_bytes())?;
 
     Ok(())
 }
