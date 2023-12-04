@@ -1,8 +1,9 @@
-#![allow(dead_code, unreachable_code)]
+#![allow(dead_code, unreachable_code, unused_imports)]
 
 use chrono::naive::serde::ts_seconds_option;
 use chrono::{DateTime, Local, NaiveDateTime};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::fs::{DirEntry, File};
 use std::io::Read;
 use std::io::{self, Write};
@@ -25,7 +26,7 @@ struct Submission {
 #[derive(Serialize, Deserialize, Debug)]
 struct Song {
     artist_name: String,
-    song_name: String,
+    track_name: String,
     duration_ms: i32,
 }
 
@@ -52,31 +53,38 @@ fn main() -> Result<(), io::Error> {
     let songs_json = serde_json::to_string(&songs)?;
 
     let request_json = format!(
-        "{{
-        \"listen_type\": \"import\",
-        \"payload\": [
-        {}
-        ]}}",
+        "{{\"listen_type\": \"import\",\"payload\": {}}}",
         songs_json
     );
+
+    println!("{}", request_json);
 
     let clint = reqwest::blocking::Client::new();
     let res = clint
         .post("http://localhost:8100/1/submit-listens")
         .header("Content-type", "application/json")
-        .header(
-            "Authorization",
-            "Token ".to_owned() + &options.usertoken.to_owned(),
-        )
+        .header("Authorization", "Token ".to_owned() + &options.usertoken)
         .body(request_json)
         .send()
-        .unwrap()
-        .text()
-        .unwrap();
+        .expect("error sending request");
 
-    println!("{:?}", res);
+    println!("{}", res.status());
+    // File::create("res.html")?.write_all(res.as_bytes())?;
 
-    File::create("res.html")?.write_all(res.as_bytes())?;
+    if res.status() == 200 {
+        println!(
+            "{} succesfully submitted, deleting...",
+            &logs[0].filepath.path().to_str().unwrap()
+        );
+    } else {
+        println!(
+            "error submitting log {}, status code {}",
+            &logs[0].filepath.path().to_str().unwrap(),
+            res.status()
+        )
+    }
+
+    // TODO add file deletion
 
     Ok(())
 }
@@ -222,7 +230,7 @@ fn parse_logs(logfile: &Log) -> Vec<Submission> {
 
             let song = Song {
                 artist_name: artistpart,
-                song_name: namepart,
+                track_name: namepart,
                 duration_ms: lengthpartmsec,
             };
 
