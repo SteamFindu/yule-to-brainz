@@ -21,8 +21,8 @@ The script does delete your log files, possibly adding an option to change this 
 
 Most edge cases just give a warning in the console and are ignored, as this program isn't intended to perfectly upload all data, just to help fill out some of the possible gaps.
 
-- Any song with the string ` - ` gives out a warning and is ignored. 
+- Any song name with the string `" - "` gives out a warning and is ignored. 
 - Over 1 hour songs are not supported and ignored.
 - Listening over the dateline of 2 days just ignores the last songs playtime and submits it regardless.
 
-There are probably other edge cases that cause errors with incorrect formatting. 
+There are probably other edge cases that cause errors with incorrect formatting. It is what it is.
