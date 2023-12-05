@@ -8,6 +8,10 @@ currently requires running local listenbrainz server, this will bet changed in t
 
 run the script with the first argument being the folder location of all the logs, the second being your listenbrainz token which the files will be submitted to.
 
+example:
+
+` C:\Users\username\AppData\Roaming\WACUP\Logs`
+
 ## Edge cases
 
 most edge cases just give a warning in the console and are ignored, as this program isnt intended to perfectly upload all data, just to help fill out some of the possible gaps.

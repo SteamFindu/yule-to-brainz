@@ -1,19 +1,17 @@
-#![allow(dead_code, unreachable_code, unused_imports)]
+// #![allow(dead_code, unreachable_code, unused_imports)]
 
 use chrono::naive::serde::ts_seconds_option;
 use chrono::{DateTime, Local, NaiveDateTime};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::fs::{DirEntry, File};
 use std::io::Read;
-use std::io::{self, Write};
+use std::io::{self};
 use std::{env, fs};
 
 #[derive(Debug)]
 struct Log {
     filepath: DirEntry,
     contents: String,
-    parsed: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -44,7 +42,7 @@ fn main() -> Result<(), io::Error> {
         usertoken: args[2].to_string(),
     };
 
-    dbg!(&options);
+    // dbg!(&options);
 
     let logs = load_files(options.filepath)?;
 
@@ -71,7 +69,7 @@ fn main() -> Result<(), io::Error> {
 
         let clint = reqwest::blocking::Client::new();
         let res = clint
-            .post("http://localhost:8100/1/submit-listens")
+            .post("https://api.listenbrainz.org/1/submit-listens")
             .header("Content-type", "application/json")
             .header("Authorization", "Token ".to_owned() + &options.usertoken)
             .body(request_json)
@@ -113,17 +111,10 @@ fn load_files(path: String) -> Result<Vec<Log>, io::Error> {
         files.push(Log {
             filepath: path,
             contents: content,
-            parsed: false,
         });
     }
 
     Ok(files)
-}
-
-fn delete_logs(log: &Log) -> Result<(), io::Error> {
-    dbg!(log.filepath.path());
-    // fs::remove_file(log.filepath.path())?;
-    Ok(())
 }
 
 fn parse_logs(logfile: &Log) -> Vec<Submission> {
@@ -169,7 +160,7 @@ fn parse_logs(logfile: &Log) -> Vec<Submission> {
 
                 println!("song with name {nameval} has been super incorrecly tagged, fix it");
                 continue;
-                nameval
+                // nameval
             } else {
                 parts[3].to_string()
             };
@@ -233,7 +224,7 @@ fn parse_logs(logfile: &Log) -> Vec<Submission> {
                 .unwrap()
                 .naive_utc();
 
-            if !next_row_pos > rows_clone.len() {
+            if rows_clone[next_row_pos] != "" {
                 let next_row_datetimepartstr = if rows_clone[next_row_pos].contains("stopped") {
                     let row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
                     let next_row_date = row_clone[3];
