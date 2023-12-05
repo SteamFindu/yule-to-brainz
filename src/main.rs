@@ -48,43 +48,54 @@ fn main() -> Result<(), io::Error> {
 
     let logs = load_files(options.filepath)?;
 
-    let songs = parse_logs(&logs[0]);
+    for log in logs {
+        let songs = parse_logs(&log);
 
-    let songs_json = serde_json::to_string(&songs)?;
+        if songs.len() == 0 {
+            println!(
+                "log {} empty, deleting...",
+                &log.filepath.path().to_str().unwrap()
+            );
+            fs::remove_file(&log.filepath.path()).expect("failed to delete log.");
+            continue;
+        }
 
-    let request_json = format!(
-        "{{\"listen_type\": \"import\",\"payload\": {}}}",
-        songs_json
-    );
+        let songs_json = serde_json::to_string(&songs)?;
 
-    println!("{}", request_json);
-
-    let clint = reqwest::blocking::Client::new();
-    let res = clint
-        .post("http://localhost:8100/1/submit-listens")
-        .header("Content-type", "application/json")
-        .header("Authorization", "Token ".to_owned() + &options.usertoken)
-        .body(request_json)
-        .send()
-        .expect("error sending request");
-
-    println!("{}", res.status());
-    // File::create("res.html")?.write_all(res.as_bytes())?;
-
-    if res.status() == 200 {
-        println!(
-            "{} succesfully submitted, deleting...",
-            &logs[0].filepath.path().to_str().unwrap()
+        let request_json = format!(
+            "{{\"listen_type\": \"import\",\"payload\": {}}}",
+            songs_json
         );
-    } else {
-        println!(
-            "error submitting log {}, status code {}",
-            &logs[0].filepath.path().to_str().unwrap(),
-            res.status()
-        )
-    }
 
-    // TODO add file deletion
+        // println!("{}", request_json);
+
+        let clint = reqwest::blocking::Client::new();
+        let res = clint
+            .post("http://localhost:8100/1/submit-listens")
+            .header("Content-type", "application/json")
+            .header("Authorization", "Token ".to_owned() + &options.usertoken)
+            .body(request_json)
+            .send()
+            .expect("error sending request");
+
+        // println!("{}", res.status());
+        // File::create("res.html")?.write_all(res.as_bytes())?;
+
+        if res.status() == 200 {
+            println!(
+                "{} succesfully submitted, deleting...",
+                &log.filepath.path().to_str().unwrap()
+            );
+
+            fs::remove_file(&log.filepath.path()).expect("failed to delete log.");
+        } else {
+            println!(
+                "error submitting log {}, status code {}",
+                &log.filepath.path().to_str().unwrap(),
+                res.status()
+            )
+        }
+    }
 
     Ok(())
 }
@@ -122,6 +133,8 @@ fn parse_logs(logfile: &Log) -> Vec<Submission> {
     // dbg!(&rows);
     let mut submissions: Vec<Submission> = Vec::new();
 
+    // make a clone of rows to compare playtime with the next line, otherwise it would be consumed
+    // by the iterator
     let rows_clone = rows.clone();
     let mut next_row_pos: usize = 0;
     let timezone = Local::now().offset().clone();
@@ -179,9 +192,33 @@ fn parse_logs(logfile: &Log) -> Vec<Submission> {
                 continue;
             }
 
-            let mut mins: i32 = lengthpart.next().unwrap().parse().unwrap();
+            let mut mins: i32 = match lengthpart.next() {
+                None => {
+                    println!("song {namepart} has broken time. please fix.");
+                    continue;
+                }
+                Some(x) => match x.parse() {
+                    Err(_err) => {
+                        println!("song {namepart} has an incorrect time format. please fix.");
+                        continue;
+                    }
+                    Ok(var) => var,
+                },
+            };
             mins = mins * 60;
-            let secs: i32 = lengthpart.next().unwrap().parse().unwrap();
+            let secs: i32 = match lengthpart.next() {
+                None => {
+                    println!("song {namepart} has broken time. please fix.");
+                    continue;
+                }
+                Some(x) => match x.parse() {
+                    Err(_err) => {
+                        println!("song {namepart} has an incorrect time format. please fix.");
+                        continue;
+                    }
+                    Ok(var) => var,
+                },
+            };
             let lengthpartmsec = (mins + secs) * 1000;
 
             if lengthpartmsec == 0 {
@@ -196,36 +233,38 @@ fn parse_logs(logfile: &Log) -> Vec<Submission> {
                 .unwrap()
                 .naive_utc();
 
-            let next_row_datetimepartstr = if rows_clone[next_row_pos].contains("stopped") {
-                let row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
-                let next_row_date = row_clone[3];
-                let next_row_time = row_clone[5];
+            if !next_row_pos > rows_clone.len() {
+                let next_row_datetimepartstr = if rows_clone[next_row_pos].contains("stopped") {
+                    let row_clone: Vec<&str> = rows_clone[next_row_pos].split(" ").collect();
+                    let next_row_date = row_clone[3];
+                    let next_row_time = row_clone[5];
 
-                format!("{next_row_date} {next_row_time} {timezone}")
-            } else {
-                let row_clone: Vec<&str> = rows_clone[next_row_pos].split(" - ").collect();
-                let next_row_date = row_clone[0];
-                let next_row_time = row_clone[1];
+                    format!("{next_row_date} {next_row_time} {timezone}")
+                } else {
+                    let row_clone: Vec<&str> = rows_clone[next_row_pos].split(" - ").collect();
+                    let next_row_date = row_clone[0];
+                    let next_row_time = row_clone[1];
 
-                // dbg!(next_row_date, next_row_time);
+                    // dbg!(next_row_date, next_row_time);
 
-                format!("{next_row_date} {next_row_time} {timezone}")
-            };
+                    format!("{next_row_date} {next_row_time} {timezone}")
+                };
 
-            let next_row_datetime =
-                DateTime::parse_from_str(&next_row_datetimepartstr, "%d-%m-%Y %H:%M:%S %z")
-                    .unwrap()
-                    .naive_utc();
+                let next_row_datetime =
+                    DateTime::parse_from_str(&next_row_datetimepartstr, "%d-%m-%Y %H:%M:%S %z")
+                        .unwrap()
+                        .naive_utc();
 
-            if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartmsec)
-                || lengthpartmsec < 240000
-            {
-                /* Listens should be submitted for tracks when the user has listened to half the track or 4 minutes of the track,
-                 * whichever is lower. If the user hasn’t listened to 4 minutes or half the track,
-                 * it doesn’t fully count as a listen and should not be submitted. */
+                if !more_than_half_listened(datetimepart, next_row_datetime, lengthpartmsec)
+                    || lengthpartmsec < 240000
+                {
+                    /* Listens should be submitted for tracks when the user has listened to half the track or 4 minutes of the track,
+                     * whichever is lower. If the user hasn’t listened to 4 minutes or half the track,
+                     * it doesn’t fully count as a listen and should not be submitted. */
 
-                // println!("Song {namepart} was not listened to for over 50%");
-                continue;
+                    // println!("Song {namepart} was not listened to for over 50%");
+                    continue;
+                }
             }
 
             let song = Song {
