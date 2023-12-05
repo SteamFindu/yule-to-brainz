@@ -15,6 +15,8 @@ Run the script with the first argument being the folder location of all the logs
 Example usage:
 `.\yule-to-brainz.exe C:\Users\username\AppData\Roaming\WACUP\Logs 1sdfr1dx-1906-4674-b041-f2f6405h32yf`
 
+The script does delete your log files, possibly adding an option to change this behaviour later.
+
 ## Edge cases
 
 Most edge cases just give a warning in the console and are ignored, as this program isn't intended to perfectly upload all data, just to help fill out some of the possible gaps.
