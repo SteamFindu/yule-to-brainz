@@ -32,6 +32,7 @@ struct Song {
 struct Options {
     filepath: String,
     usertoken: String,
+    // TODO: add delete option
 }
 
 fn main() -> Result<(), io::Error> {
