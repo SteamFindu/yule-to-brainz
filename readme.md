@@ -17,6 +17,8 @@ Example usage:
 
 The script does delete your log files, possibly adding an option to change this behaviour later.
 
+Listenbrainz seems to be able to ignore duplicate submits so running the program again on the same logs should not change your listens.
+
 ## Edge cases
 
 Most edge cases just give a warning in the console and are ignored, as this program isn't intended to perfectly upload all data, just to help fill out some of the possible gaps.
